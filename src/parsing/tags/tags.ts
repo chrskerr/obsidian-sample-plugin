@@ -16,7 +16,9 @@ export function getTagsFromContent(content: string): Set<string> {
 // https://www.regular-expressions.info/unicode.html
 // `\p{L}` is any letter in any language
 // `\p{N}` is any numeric in any language
-const tagsRegex = /#([-_/\p{L}\p{N}]+)/gu;
+
+//const tagsRegex = /#([-_/\p{L}\p{N}]+)/gu;
+const tagsRegex = /#(\S*)/g;
 const tagNonNumericTest = /\p{L}/u;
 
 // const tagRegex = /#([-_/\p{S}\p{N}]+)/gu;

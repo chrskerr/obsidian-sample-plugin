@@ -36,20 +36,36 @@ export class Task {
 		this._done = status === "x";
 		this._path = fileHandle.path;
 
+		// the last matched tag will be used, all other matched tag will be deleted.
+		// a boolean should be added, so that the user may decide the behavior related to remove the other matched tags.
 		for (const tag of tags) {
 			if (tag in columnTagTable || tag === "done") {
 				if (!this._column) {
 					this._column = tag as ColumnTag;
 				}
-				tags.delete(tag);
+				tags.delete(tag); 
 				if (!consolidateTags) {
+					let regExp1 = new RegExp(`#${tag} |#${tag}$`,"g")
+					/*
+					the regexp of tag is "#\S " with a space at the end.
+					However, in obsidian, when the tag is at the end of line, 
+					it is accepted when the last space is omitted. 
+					*/
 					this.content = this.content
-						.replaceAll(`#${tag}`, "")
+						.replace(regExp1, " ")
 						.trim();
 				}
 			}
 			if (consolidateTags) {
-				this.content = this.content.replaceAll(`#${tag}`, "").trim();
+				let regExp1 = new RegExp(`#${tag} |#${tag}$`,"g")
+				/*
+				the regexp of tag is "#\S " with a space at the end.
+				However, in obsidian, when the tag is at the end of line, 
+				it is accepted when the last space is omitted. 
+				*/
+				this.content = this.content
+					.replace(regExp1, " ")
+					.trim();
 			}
 		}
 

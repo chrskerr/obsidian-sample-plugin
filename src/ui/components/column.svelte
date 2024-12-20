@@ -31,7 +31,11 @@
 			case "uncategorised":
 				return "Uncategorised";
 			default:
-				return columnTagTable[column];
+				let columnString = columnTagTable[column]
+					.replaceAll(/#/g,"") //remove "#" which is not necessary
+					.replaceAll(/\s/g,"") //remove all empty charactors which may not be allowed for a tag name
+					.trim();// trim the spaces
+				return columnString;
 		}
 	}
 
