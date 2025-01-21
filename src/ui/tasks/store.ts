@@ -142,6 +142,7 @@ export function createTasksStore(
 		metadataByTaskId,
 		vault,
 		workspace,
+		settingsStore,
 	});
 
 	return { tasksStore, taskActions, initialise };

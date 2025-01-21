@@ -51,6 +51,19 @@ export class SettingsModal extends Modal {
 			});
 
 		new Setting(this.contentEl)
+			.setName("Default task location")
+			.setDesc(
+				'Specify the .md file for new tasks. Leave blank to choose each time a new task is added. Start with a forward slash (/) for a full folder path. Otherwise, tasks go to the specified path in the current folder. The path must not contain these characters: * " \\ / < > : | ?'
+			)
+			.addText((text) => {
+				text.setPlaceholder("Tasks.md")
+					.setValue(this.settings.defaultTaskPath ?? "")
+					.onChange((value) => {
+						this.settings.defaultTaskPath = value;
+					});
+			});
+
+		new Setting(this.contentEl)
 			.setName("Show filepath")
 			.setDesc("Show the filepath on each task in Kanban?")
 			.addToggle((toggle) => {

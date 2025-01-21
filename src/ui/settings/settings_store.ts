@@ -25,6 +25,7 @@ const settingsObject = z.object({
 		.nativeEnum(VisibilityOption)
 		.default(VisibilityOption.AlwaysShow)
 		.optional(),
+	defaultTaskPath: z.string().optional(),
 });
 
 export type SettingValues = z.infer<typeof settingsObject>;
@@ -36,17 +37,63 @@ export const defaultSettings: SettingValues = {
 	consolidateTags: false,
 	uncategorizedVisibility: VisibilityOption.Auto,
 	doneVisibility: VisibilityOption.AlwaysShow,
+	defaultTaskPath: "Tasks.md",
 };
 
 export const createSettingsStore = () =>
 	writable<SettingValues>(defaultSettings);
 
-export function parseSettingsString(str: string): SettingValues {
+const nonEnforcedFields: (keyof SettingValues)[] = ["defaultTaskPath"];
+
+export function parseSettingsString(settingsString: string): SettingValues {
+	/**
+	 * Safely parse & partially merge settings from JSON.
+	 *
+	 * If input is empty/invalid => return full defaults (a "new" board).
+	 * If input is valid => merge with defaults but omit `defaultTaskPath`
+	 * unless user explicitly provided it (including empty string).
+	 */
+
 	try {
-		return (
-			settingsObject.safeParse(JSON.parse(str)).data ?? defaultSettings
-		);
+		// If there's no content in settingsString at all, assume a brand-new board
+		if (!settingsString.trim()) {
+			return defaultSettings;
+		}
+
+		// 2. Attempt JSON parse
+		let parsedConfig: unknown;
+		try {
+			parsedConfig = JSON.parse(settingsString);
+		} catch {
+			// Malformed JSON => treat as new
+			return defaultSettings;
+		}
+
+		// 3. Validate with Zod
+		const ValidatedSettings = settingsObject.safeParse(parsedConfig);
+		if (!ValidatedSettings.success) {
+			// Invalid shape => treat as new
+			return defaultSettings;
+		}
+
+		// 4. Merge validated user data with defaults, ensuring missing optional fields
+		//    get default values while keeping any explicitly set values from the user's config.
+		const mergedSettings = {
+			...defaultSettings,
+			...ValidatedSettings.data,
+		};
+
+		// 5. Remove non enforced fields if they weren't explicitly provided
+		nonEnforcedFields.forEach((field) => {
+			if (!Object.prototype.hasOwnProperty.call(parsedConfig, field)) {
+				console.log(`Removing optional field: ${field}`);
+				delete mergedSettings[field];
+			}
+		});
+
+		return mergedSettings;
 	} catch {
+		// If something above throws an error, reset to defaults
 		return defaultSettings;
 	}
 }

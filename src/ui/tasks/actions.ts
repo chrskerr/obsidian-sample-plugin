@@ -8,6 +8,9 @@ import {
 import type { Task } from "./task";
 import type { Metadata } from "./tasks";
 import type { ColumnTag } from "../columns/columns";
+import { type Writable } from "svelte/store";
+import type { SettingValues } from "../settings/settings_store";
+import { get } from "svelte/store";
 
 export type TaskActions = {
 	changeColumn: (id: string, column: ColumnTag) => Promise<void>;
@@ -24,11 +27,13 @@ export function createTaskActions({
 	metadataByTaskId,
 	vault,
 	workspace,
+	settingsStore,
 }: {
 	tasksByTaskId: Map<string, Task>;
 	metadataByTaskId: Map<string, Metadata>;
 	vault: Vault;
 	workspace: Workspace;
+	settingsStore: Writable<SettingValues>;
 }): TaskActions {
 	async function updateRowWithTask(
 		id: string,
@@ -92,9 +97,28 @@ export function createTaskActions({
 		},
 
 		async addNew(column, e) {
-			const files = vault
-				.getMarkdownFiles()
-				.sort((a, b) => a.path.localeCompare(b.path));
+			// Get configured default path from settings
+			const defaultTaskPath = get(settingsStore).defaultTaskPath;
+
+			// The following characters are not allowed by obsidian in file names
+			const forbiddenCharacters = /[*\\"<>:|?]/;
+
+			if (
+				defaultTaskPath?.trim() &&
+				!forbiddenCharacters.test(defaultTaskPath)
+			) {
+				// Try to add task at default path
+				const added = await addAtPath(
+					vault,
+					column,
+					defaultTaskPath,
+					workspace
+				);
+
+				if (added) {
+					return;
+				}
+			}
 
 			const target = e.target as HTMLButtonElement | undefined;
 			if (!target) {
@@ -142,6 +166,10 @@ export function createTaskActions({
 			}
 			const folder: Folder = {};
 
+			const files = vault
+				.getMarkdownFiles()
+				.sort((a, b) => a.path.localeCompare(b.path));
+
 			for (const file of files) {
 				const segments = file.path.split("/");
 
@@ -163,6 +191,93 @@ export function createTaskActions({
 			createMenu(folder, undefined);
 		},
 	};
+}
+
+async function ensureFolder(
+	vault: Vault,
+	folderPath: string
+): Promise<boolean> {
+	if (!folderPath) return true;
+	const folderExists = await vault.adapter.exists(folderPath);
+
+	if (!folderExists) {
+		await vault.createFolder(folderPath);
+		return await vault.adapter.exists(folderPath);
+	}
+	return true;
+}
+
+async function ensureMarkdownFile(
+	vault: Vault,
+	path: string
+): Promise<TFile | null> {
+	const exists = await vault.adapter.exists(path);
+	if (!exists) {
+		await vault.create(path, "");
+	}
+	const file = vault.getAbstractFileByPath(path);
+	return file instanceof TFile ? file : null;
+}
+
+async function addAtPath(
+	vault: Vault,
+	column: ColumnTag,
+	defaultTaskPath: string,
+	workspace: Workspace
+): Promise<boolean> {
+	// Try to add task at default path, creating file if needed
+	// Returns true if task was added, false if not
+	// Try/catch is used because file operations could cause unforseen os-level errors
+
+	try {
+		const fullPath = normalizePath(defaultTaskPath, workspace);
+		const folderPath = fullPath.substring(0, fullPath.lastIndexOf("/"));
+
+		const folder = await ensureFolder(vault, folderPath);
+		if (!folder) {
+			console.error(`Failed to create/access folder at ${folderPath}`);
+			return false;
+		}
+
+		const file = await ensureMarkdownFile(vault, fullPath);
+
+		if (file) {
+			updateRow(vault, file, undefined, `- [ ]  #${column}`);
+			return true;
+		}
+
+		console.error(`Failed to create/access markdown file at ${fullPath}`);
+		return false;
+	} catch (error) {
+		console.error(`Error in addAtPath: ${error}`);
+		return false;
+	}
+}
+
+function normalizePath(defaultTaskPath: string, workspace: Workspace): string {
+	// Get the kanban board's directory path
+	const currentFilePath = workspace.getActiveFile()?.parent?.path || "";
+
+	// Determine if path is absolute (starts with "/") or relative
+	const isAbsolutePath = defaultTaskPath.startsWith("/");
+
+	// If relative path, combine with current directory
+	let fullPath = isAbsolutePath
+		? defaultTaskPath
+		: `${currentFilePath}/${defaultTaskPath}`;
+
+	// Remove leading slashes, even if there are multiple
+	fullPath = fullPath.replace(/^\/+/, "");
+
+	// If path ends with "/", add default file
+	fullPath = fullPath.endsWith("/") ? fullPath + "Tasks.md" : fullPath;
+
+	// Add .md extension if needed
+	if (!fullPath.endsWith(".md")) {
+		fullPath += ".md";
+	}
+
+	return fullPath;
 }
 
 async function updateRow(
